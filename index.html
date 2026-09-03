@@ -1,0 +1,1370 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Last Card</title>
+    <meta name="description" content="A shrinking deck on a living board. One thumb. The last card saves the realm." />
+    <!-- #216: the faces are self-hosted (src/ui/fonts.css + src/ui/fonts/,
+         font-display: swap). A cross-origin stylesheet here was render-blocking:
+         with no network, first paint and the module script behind it waited for
+         the request to fail (white for 5-15 s, the #212 airplane-mode frames).
+         Fonts must never gate first paint — this sheet is same-origin and its
+         faces swap in over the system fallback stack below. -->
+    <!-- #354: the two Lora faces the placards are set in (the summary line's
+         italic and its bold figures). A face is only fetched when text first
+         lays out in it, and the end-of-run placard is that first text — so the
+         redraw that measured it (main.ts insets(), the placard's band) saw a
+         placard 7 px shorter than its settled height, and the board's mask
+         ended 7 px under it. Preloaded, the faces land during the module graph's
+         own seconds and the placard is measured at its final size on the first
+         paint; main.ts re-measures once on document.fonts.ready in case they
+         did not. Fonts still never gate first paint (#216). -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="./assets/lora-latin-italic-DBI-iqMr.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="./assets/lora-latin-BiLcIKcI.woff2">
+    <style>
+      :root {
+        --bg: #f9e8cf;
+        --ink: #3f3227;
+        --chip: #ffffff;
+      }
+      * { margin: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body { height: 100%; width: 100%; overscroll-behavior: none; }
+      body {
+        margin: 0;
+        background: transparent;
+        color: var(--ink);
+        font-family: 'Gantari', 'Avenir Next', system-ui, sans-serif;
+        overflow: hidden;
+        user-select: none;
+        touch-action: manipulation;
+        -webkit-font-smoothing: antialiased;
+      }
+      #app { position: relative; height: 100%; width: 100%; overflow: hidden; user-select: none; }
+      #app.sky-noon { background: linear-gradient(178deg, #f9e8cf 0%, #f2dcbe 48%, #eccfab 100%); }
+      #app.sky-dusk { background: linear-gradient(178deg, #e8b793 0%, #dd9d84 42%, #c97f79 100%); }
+      /* #174: the industrial age's noon — same sky, smoke in it */
+      #app.sky-era2 { background: linear-gradient(178deg, #ede0c4 0%, #dbc79f 48%, #c6af85 100%); }
+      
+      /* touch-action: none — the board's own drag IS the pan (CIT-8) */
+      #board {
+        position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      #board text { font-family: 'Gantari', 'Avenir Next', system-ui, sans-serif; user-select: none; pointer-events: none; }
+
+      /* #59: WebKit cannot composite an animated SVG child in isolation — any
+         `animation: … infinite` inside #board invalidates and repaints the
+         WHOLE board svg on every tick (measured: idle CPU 98–128% with only
+         3–6 such nodes, vs. 0.2–0.4% with none; confirmed a single infinitely
+         animated node alone still costs ~28% on this Mac, regardless of
+         `will-change`). The card's own boundary allows this: "static art is
+         acceptable, deleted art is not" — smoke, the legal ghost pulse and the
+         tier-up glow keep their shapes and colors, they just stop being the
+         thing that keeps the board's core busy at rest. */
+      .smoke { opacity: 0.75; }
+
+      .legal-pulse { opacity: 0.62; }
+
+      /* #355 — ONE VOICE AT REST (compare #19: "the wharf HUD competes with a
+         board that has no focal point"). The at-rest frame has one primary,
+         the hand's playable card; every other piece of furniture sits a
+         register down until it is the thing being decided, and comes back up
+         on its own moment: the menu on press, the skill circle when a verb is
+         armed, the deck when it can be bought from, the teaching lines when
+         they answer an action, the quest badges when a quest is tapped. The
+         register is a stylesheet fact keyed on a state main.ts already owns
+         (`#skills.armed`, `#app.quest-focus`, `#cardhint.quiet`) — nothing
+         is rebuilt per frame and no DOM is added. Measured by
+         tests/hud_register.test.ts: mean |L - band| per element on x2 frames,
+         loud at >= 40. */
+
+      /* Menu button — at rest the three bars alone on the sky, the hex face
+         only under the thumb. */
+      #menu, .hexbtn {
+        position: absolute; top: 20px; left: 18px; width: 48px; height: 48px; border: 0; padding: 0; cursor: pointer;
+        background: transparent;
+        z-index: 5;
+      }
+      #menu .hexface, .hexbtn .hexface {
+        display: flex; width: 100%; height: 100%; align-items: center; justify-content: center;
+        clip-path: polygon(50% 0, 96% 26%, 96% 74%, 50% 100%, 4% 74%, 4% 26%);
+        background: rgba(255,252,244,0);
+        transition: background-color 160ms ease-out;
+      }
+      #menu svg, .hexbtn svg { width: 19px; height: 14px; display: block; }
+      #menu rect, .hexbtn rect { fill: rgba(74,61,49,.62); transition: fill 160ms ease-out; }
+      #menu:active, .hexbtn:active { transform: scale(0.95); }
+      #menu:active .hexface, #menu:focus-visible .hexface { background: rgba(255,252,244,.95); }
+      #menu:active rect, #menu:focus-visible rect { fill: #4a3d31; }
+      @media (hover: hover) {
+        #menu:hover .hexface { background: rgba(255,252,244,.95); }
+        #menu:hover rect { fill: #4a3d31; }
+      }
+
+      /* Build Stamp */
+      #stamp, .stamp {
+        position: absolute; top: 72px; left: 20px;
+        font-size: 9.5px; font-weight: 700; font-family: 'Gantari', monospace;
+        color: rgba(97,62,32,.5); pointer-events: none;
+        letter-spacing: 0.3px;
+      }
+      #app.sky-dusk #stamp { color: rgba(255,250,240,.6); }
+
+      /* #164: the FPS meter — exists only while the toggle is on */
+      #fps {
+        position: absolute; top: 84px; left: 20px;
+        font-size: 9.5px; font-weight: 700; font-family: 'Gantari', monospace;
+        color: rgba(97,62,32,.55); pointer-events: none;
+        font-variant-numeric: tabular-nums;
+      }
+      #app.sky-dusk #fps { color: rgba(255,250,240,.6); }
+
+      /* #164/#197: the settings debug area */
+      .debug-area {
+        margin-top: 6px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: rgba(97, 62, 32, 0.06);
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        color: rgba(97, 62, 32, 0.65);
+        text-align: center;
+      }
+
+      /* HUD */
+      #hud, .hud {
+        position: absolute; top: 20px; right: 18px;
+        display: flex; flex-direction: column; align-items: flex-end;
+        pointer-events: none;
+        z-index: 5;
+      }
+      #score, .score {
+        font-size: 38px; font-weight: 900; line-height: 1; letter-spacing: -.02em;
+        color: #fffaf0;
+        text-shadow: 0 2px 2px rgba(97,62,32,.35), 0 6px 18px rgba(97,62,32,.35);
+        font-variant-numeric: tabular-nums;
+      }
+      /* #205 (reopened): the next-card track's home is the sheet — full width
+         on the sheet card, label above the bar. */
+      #reward { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+      #rewardbar, .rewardbar {
+        width: 100%; height: 4px; border-radius: 2px;
+        background: rgba(74,58,41,.25); overflow: hidden;
+      }
+      #rewardfill, .rewardbar i {
+        display: block; height: 100%; width: 0%;
+        background: #3f3227; border-radius: 2px;
+      }
+      #rewardfill.settled { transition: width 200ms ease-out; }
+      #rewardlabel, .rewardlabel {
+        font-size: 10px; font-weight: 800; letter-spacing: .03em;
+        /* #216: pinned line-height — see .realm-flow-header. */
+        line-height: 13px;
+        color: #4a3d31;
+      }
+      #ledger, .ledgertag {
+        display: flex; align-items: center; gap: 4px;
+        margin-top: 4px; background: rgba(255,252,243,.92);
+        border: 1.5px solid transparent; border-radius: 8px;
+        padding: 2.5px 7px; box-shadow: 0 2px 6px rgba(97,62,32,.14);
+        font-variant-numeric: tabular-nums;
+      }
+      #ledgericon, .coin {
+        width: 13px; height: 13px; border-radius: 50%;
+        background: radial-gradient(circle at 34% 30%, #f2d489, #d9a13f 58%, #a8752a);
+        box-shadow: 0 1px 2px rgba(97,62,32,.4), inset 0 0 0 1.5px rgba(122,84,26,.55);
+        flex: none; display: block;
+      }
+      #ledger { flex-wrap: wrap; max-width: 160px; }
+      #ledgerbal, .ledgertag .bal { font-size: 15px; font-weight: 900; color: #3f3227; }
+      #ledgernet, .ledgertag .net { font-size: 12px; font-weight: 900; color: #3f7a4e; }
+      #ledgerwarn {
+        display: none;
+        flex-basis: 100%;
+        font-size: 10px; font-weight: 700; font-style: italic;
+        line-height: 1.25; color: #a8402c;
+        padding-top: 2px;
+      }
+      #ledger.debt #ledgerwarn, #ledger.starved #ledgerwarn { display: block; }
+      #ledger.falling #ledgernet { color: #b3543f; }
+      #creditrunway {
+        display: none; align-items: center; gap: 4px;
+        min-width: 0; color: #a8402c;
+      }
+      #ledger.debt #creditrunway { display: flex; }
+      #creditfraction {
+        min-width: 31px; font-size: 10px; font-weight: 900; line-height: 13px;
+        text-align: right; color: #a8402c; white-space: nowrap;
+      }
+      #credittrack {
+        display: block; width: var(--credit-width, 7px); height: 7px;
+        overflow: hidden; border: 1px solid rgba(168,64,44,.72); border-radius: 4px;
+        background: repeating-linear-gradient(
+          90deg,
+          rgba(168,64,44,.09) 0,
+          rgba(168,64,44,.09) calc(var(--credit-step, 7px) - 1px),
+          rgba(168,64,44,.42) calc(var(--credit-step, 7px) - 1px),
+          rgba(168,64,44,.42) var(--credit-step, 7px)
+        );
+        box-sizing: border-box;
+      }
+      #creditfill {
+        display: block; height: 100%; width: 100%; transform-origin: left center;
+        transform: scaleX(var(--credit-ratio, 1)); background: #d9a13f;
+      }
+      /* #61: `animation: alarmpulse … infinite` used to animate box-shadow
+         itself — not a compositable property, so WebKit repainted the pill's
+         shadow region every frame for as long as the player stayed in debt
+         or locked (measured 32% all-WebKit CPU at rest on ?scenario=decay,
+         vs 0.05% with a healthy ledger). A same-cost opacity pulse on a
+         pseudo-element was tried and measured cheap but non-zero (~2%, and
+         noisy up to ~3.4% on this rig) — the card's own boundary prefers
+         "costs nothing" over "costs a little", and explicitly allows static
+         alarm styling, so the glow is just static now. Red border, red
+         numbers: still unmistakably in alarm, just not animated. */
+      #ledger.pinned, #ledger.debt {
+        background: rgba(255,246,238,.96);
+        border-color: #b3543f;
+        box-shadow: 0 2px 14px rgba(179,84,63,.55);
+      }
+      #ledger.pinned #ledgerbal, #ledger.pinned #ledgernet,
+      #ledger.debt #ledgerbal, #ledger.debt #ledgernet {
+        color: #a8402c;
+      }
+      @keyframes ledger-tick {
+        0%   { transform: scale(1); }
+        30%  { transform: scale(1.18); box-shadow: 0 4px 14px rgba(217,161,63,.55); }
+        100% { transform: scale(1); }
+      }
+      #ledger.tick { animation: ledger-tick 520ms ease-out; }
+
+      /* #257 — THE SKILL CIRCLE (the owner's ruling, 31 Aug 2026), replacing
+         #231's left rail. The ruling: "on left side in a Quadrat [in C&C3]. We
+         want the Same in a Circle left Side mid, no bar which Highlights them",
+         and from the card, "Left Bar is blocking Sight."
+
+         The BAR was the sight-blocker, not the buttons. So: the same verbs, the
+         same contract, arranged on a CIRCLE at the board's left edge at mid
+         height, as BARE round icons over the board — no rail, no panel, no
+         reserved column. The container paints nothing and takes no pointer
+         events; the board shows through around and between the icons and a tap
+         in the gap reaches the map, which is the point of removing the rail.
+         Geometry (the ring's radius, the slot angles) is main.ts's, beside the
+         roster it lays out — this file styles one icon, not the arrangement. */
+      #skills {
+        position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+        display: none; pointer-events: none; z-index: 5;
+      }
+      #skills.live { display: block; }
+      /* One skill: a round face with its own frame, the way a C&C3 support
+         power carries its own. That frame is the ICON's, not a bar behind the
+         group — over grass or water the disc is what keeps the silhouette
+         readable at x1 (roles/ui-developer.md's minimum step). */
+      #skills .skill {
+        position: absolute; appearance: none; padding: 0; cursor: pointer;
+        width: 52px; height: 52px; border-radius: 50%;
+        pointer-events: auto;
+        background: rgba(255,252,243,.94);
+        border: 2px solid rgba(90,72,52,.55);
+        box-shadow: 0 2px 7px rgba(45,32,20,.35);
+        /* #355: the circle's at-rest register. Geometry (#257) and the
+           cooldown count (#314) are untouched; only the weight moves. */
+        opacity: .7;
+        transition: transform 120ms ease-out, opacity 160ms ease-out;
+      }
+      #skills .skill:active { transform: scale(0.94); }
+      /* The verb being decided — and, while any verb is armed, the whole
+         circle, so the prices can be compared (`#skills.armed` is main.ts's). */
+      #skills.armed .skill:not(.spent), #skills .skill:active, #skills .skill:focus-visible { opacity: 1; }
+      @media (hover: hover) { #skills .skill:hover:not(.spent) { opacity: 1; } }
+      /* The face is clipped into the disc; the price chip rides the rim OUTSIDE
+         it, so the clip lives on a child rather than on the button. */
+      #skills .skill .disc {
+        position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+        pointer-events: none;
+      }
+      #skills .skill .disc .face { display: block; width: 100%; height: 100%; }
+      /* The price on the icon's face, C&C3's way: a coin chip on the rim.
+         #355: at rest the chip is the disc's own cream with the ink stepped
+         down — the number is still there to read, it just stops shouting;
+         the dark chip (the full register) is what an armed circle wears. */
+      #skills .skill .skill-price {
+        position: absolute; right: -3px; bottom: -3px;
+        min-width: 19px; height: 19px; padding: 0 3px; box-sizing: border-box;
+        border-radius: 10px;
+        background: rgba(255,252,243,.94); color: rgba(63,50,39,.82);
+        border: 1px solid rgba(90,72,52,.4);
+        display: flex; align-items: center; justify-content: center; gap: 2px;
+        font-size: 11px; font-weight: 900; line-height: 1;
+        font-variant-numeric: tabular-nums;
+        box-shadow: 0 1px 2px rgba(30,20,12,.25);
+        pointer-events: none;
+        transition: background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out;
+      }
+      #skills.armed .skill .skill-price, #skills .skill:active .skill-price, #skills .skill:focus-visible .skill-price {
+        background: #3f3227; color: #ffe9b8; border-color: #3f3227;
+        box-shadow: 0 1px 3px rgba(30,20,12,.5);
+      }
+      @media (hover: hover) {
+        #skills .skill:hover .skill-price {
+          background: #3f3227; color: #ffe9b8; border-color: #3f3227;
+          box-shadow: 0 1px 3px rgba(30,20,12,.5);
+        }
+      }
+      #skills .skill .skill-price .coin { width: 9px; height: 9px; }
+      /* The armed verb wears the selected card's outline, as the rail's did. */
+      #skills .skill.armed { border-color: #2f2519; box-shadow: 0 0 0 3px rgba(255,236,190,.85), 0 2px 8px rgba(45,32,20,.45); }
+      /* Spent / unaffordable: greys like the unplayable draft card, and still
+         answers a tap with its reason (#231's contract, unchanged). */
+      #skills .skill.spent { opacity: 0.45; filter: grayscale(35%); cursor: not-allowed; }
+      #skills .skill.spent:active { transform: none; }
+      /* #314 — remaining turns live IN the disc, quest-chip language (cream
+         pill, Gantari 900, ink #3f3227). Core owns the number
+         (`actionCooldownRemaining`); this only paints it. Opacity/filter on
+         .spent would fade the count, so cooling restores the button and greys
+         the FACE instead — unavailable before the tap, count still glanceable
+         at x1 (22px in a 52px disc). */
+      #skills .skill.cooling {
+        opacity: .7;
+        filter: none;
+        cursor: not-allowed;
+        border-color: rgba(90,72,52,.38);
+      }
+      #skills .skill.cooling .disc {
+        opacity: 0.4;
+        filter: grayscale(85%);
+      }
+      /* #303 — the verb coming OFF cooldown: the disc un-greys and the price
+         chip returns, once, on the paint where main.ts sees cooling → ready
+         (`.ready` is gated on that transition; a rebuild inside the window
+         resumes via --ready-delay rather than replaying). Opacity and
+         transform only; the grayscale simply drops with the .cooling class. */
+      @keyframes skill-ready-disc {
+        from { opacity: 0.4; }
+        to   { opacity: 1; }
+      }
+      @keyframes skill-ready-chip {
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      #skills .skill.ready .disc {
+        animation: skill-ready-disc 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        animation-delay: var(--ready-delay, 0ms);
+      }
+      #skills .skill.ready .skill-price {
+        animation: skill-ready-chip 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        animation-delay: var(--ready-delay, 0ms);
+      }
+      #skills .skill .skill-count {
+        position: absolute; left: 50%; top: 50%;
+        transform: translate(-50%, -50%);
+        min-width: 28px; height: 28px; padding: 0 5px;
+        border-radius: 8px;
+        background: rgba(255,253,246,0.96);
+        color: #3f3227;
+        border: 0.9px solid rgba(97,62,32,0.22);
+        box-shadow: 0 1px 0 rgba(60,40,20,0.18);
+        display: flex; align-items: center; justify-content: center;
+        font-family: 'Gantari', sans-serif;
+        font-size: 22px; font-weight: 900; line-height: 1;
+        font-variant-numeric: tabular-nums;
+        pointer-events: none;
+      }
+      /* #370 — ONE PLACARD PER SETTLEMENT, IN THE HUD'S OWN PAPER.
+         The painter (painter3d.ts `settlementPlacard`) inlines the projection
+         and nothing else; everything the eye reads is here, so the board's one
+         piece of writing is set in the same register as the end-of-run placard
+         below — the same cream (#fffcf3, carried at the register's own alpha),
+         the hairline brown frame, ink #3f3227, Lora italic. It hangs off its
+         anchor (`translate(-50%,-100%)`), so the point
+         the painter projects is the card's bottom edge and the stem below it
+         points back down at the landmark; the hex centre stays clear.
+         WHICH placards stand at rest is here too: `data-rest` (the capital and
+         the quest anchors) shows always, every other settlement waits for a
+         held card, a pressed hex or a hovering mouse — `#app.placards-open`,
+         main.ts's one owner of that moment. `visibility` rather than `display`
+         so every card keeps its box and main.ts's collision pass can place them
+         all at the settled frame, before any of them is asked for. */
+      #board3d-labels .placard3d {
+        position: absolute;
+        transform: translate(-50%, -100%);
+        display: flex; align-items: baseline; gap: 5px;
+        padding: 2px 7px 3px;
+        border-radius: 5px;
+        background: rgba(255, 252, 243, 0.88);
+        border: 0.9px solid rgba(97, 62, 32, 0.22);
+        box-shadow: 0 2px 6px rgba(60, 40, 20, 0.2);
+        white-space: nowrap;
+        pointer-events: none;
+        visibility: hidden;
+        opacity: 0;
+        transition: opacity 140ms ease-out;
+      }
+      /* the stem back down to the landmark the card names */
+      #board3d-labels .placard3d::after {
+        content: ''; position: absolute; left: calc(50% + var(--stem-dx, 0px)); top: 100%;
+        margin-left: -3.5px;
+        border-left: 3.5px solid transparent;
+        border-right: 3.5px solid transparent;
+        border-top: 5px solid rgba(255, 252, 243, 0.88);
+      }
+      /* #355's register, moved up to the card that now carries the quest pill:
+         a free-standing pill was the unit before, the placard is the unit now,
+         and a mark on the landscape stands a step down until the player asks
+         for it — by tapping its quest (`#app.quest-focus`) or by any of the
+         three asks in `#app.placards-open`. */
+      #board3d-labels .placard3d[data-rest] { visibility: visible; opacity: .82; }
+      #app.quest-focus #board3d-labels .placard3d[data-rest] { opacity: 1; }
+      #app.placards-open #board3d-labels .placard3d { visibility: visible; opacity: 1; }
+      #board3d-labels .placard3d .tile-label3d {
+        font-family: 'Lora', Georgia, serif; font-style: italic;
+        font-size: 11px; line-height: 13px; color: #3f3227;
+      }
+      #board3d-labels .placard3d .quest-badge3d {
+        font-size: 11px; line-height: 13px; font-weight: 800;
+        font-variant-numeric: tabular-nums; color: #3f3227;
+        padding-left: 5px;
+        border-left: 1px solid var(--quest-ink, rgba(97, 62, 32, 0.3));
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #board3d-labels .placard3d { transition: none; }
+      }
+
+      /* #216: an inline-block icon inside the text span rode the strut's
+         baseline, which is font-metric dependent — the row changed height when
+         the face swapped in. As a flex item it leaves the line box entirely. */
+      .flow-kind-row .kind-name { display: inline-flex; align-items: center; }
+      .flow-kind-row .res-icon { width: 14px; height: 14px; display: block; flex: none; margin-right: 4px; }
+      .flow-kind-row .coin { margin-right: 4px; }
+
+      /* The cream HUD variant died with #205's reopen: it existed only to keep
+         the reward track legible over the dusk sky, and the track's home is
+         the sheet now. */
+
+      /* Deck Stack */
+      #deck, .deckstack {
+        position: absolute; right: 10px; bottom: 16px; width: 64px; height: 88px;
+        pointer-events: none; z-index: 7;
+        filter: drop-shadow(0 3px 5px rgba(97,62,32,.22));
+        display: flex;
+        /* #355: a count, not a decision — until it can be bought from. */
+        opacity: .62;
+        transition: opacity 160ms ease-out;
+      }
+      #deck.buyable {
+        pointer-events: auto;
+        cursor: pointer;
+        opacity: 1;
+      }
+      #deck svg, .deckstack svg { width: 100%; height: 100%; overflow: visible; display: block; }
+      @keyframes deck-tick {
+        0%   { transform: scale(1); }
+        30%  { transform: scale(1.2); }
+        100% { transform: scale(1); }
+      }
+      #deck.tick { animation: deck-tick 480ms ease-out; }
+
+      @keyframes card-earn {
+        0%   { transform: translateY(0) scale(1); }
+        30%  { transform: translateY(-10px) scale(1.08); }
+        100% { transform: translateY(0) scale(1); }
+      }
+      .card.earned { animation: card-earn 520ms ease-out; }
+
+      /* Tray and Hand */
+      #tray, .tray {
+        position: absolute; left: 0; right: 0; bottom: 0;
+        padding: 10px 14px 20px;
+        display: flex; flex-direction: column; align-items: center; gap: 9px;
+        background: rgba(250,240,222,.95);
+        border-top: 1px solid rgba(97,62,32,.12);
+        z-index: 6;
+      }
+      #cardhint, #cardnote, .teach {
+        font-size: 12px; line-height: 1.35; font-weight: 600; color: rgba(74,58,41,.75);
+        text-align: center; max-width: 300px;
+      }
+      /* #355: the catalogue's teaching and the opening drag hint sit a
+         register down; a line that ANSWERS something (a refused drop, a
+         strike, a tapped quest, a locked draft, the coach) keeps the full
+         register above. main.ts's redrawTeaching says which is which. */
+      #cardhint.quiet, #cardnote.quiet {
+        font-size: 11px; color: rgba(74,58,41,.58);
+      }
+      #cardhint:empty, #cardnote:empty { display: none; }
+      #hand, .hand { display: flex; gap: 12px; touch-action: none; align-items: flex-end; }
+      .card, .slab {
+        width: 68px; height: 90px; border-radius: 13px; background: #fffdf6; position: relative;
+        box-shadow: 0 1px 0 rgba(255,255,255,.9) inset, 0 5px 12px rgba(97,62,32,.22), 0 0 0 1px rgba(97,62,32,.10);
+        display: flex; flex-direction: column; overflow: hidden; cursor: pointer;
+        touch-action: none;
+        transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+      }
+      /* #355: in the hand, the selected card is the one primary; the others
+         wait a step smaller (touch box stays 64x85, over the 44 floor). */
+      #hand .card:not(.selected):not(.flying) { transform: scale(0.94); transform-origin: 50% 100%; }
+      .card.selected, .slab.sel {
+        transform: translateY(-10px) rotate(-2.5deg);
+        box-shadow: 0 1px 0 rgba(255,255,255,.9) inset, 0 14px 26px rgba(97,62,32,.32), 0 0 0 2px #4a3d31;
+      }
+      .card.unplayable, .slab.unplayable {
+        opacity: 0.45; filter: grayscale(30%); cursor: not-allowed;
+      }
+      .flying-tile.illegal {
+        opacity: 0.48;
+        filter: grayscale(0.7) drop-shadow(0 8px 10px rgba(116, 28, 22, 0.42)) !important;
+      }
+      .card.lifted, .slab.lifted {
+        border: 1.5px dashed rgba(74,58,41,0.35); background: rgba(255,253,246,0.35); box-sizing: border-box;
+        box-shadow: none;
+      }
+      .card.lifted *, .slab.lifted * { display: none; }
+      .card.flying {
+        position: fixed; left: 0; top: 0; z-index: 10;
+        pointer-events: none;
+        box-shadow: 0 14px 28px rgba(50, 35, 20, 0.35);
+        transform: rotate(-3deg) scale(1.05);
+      }
+      .card .face, .card .art, .slab .art { flex: 1; display: block; width: 100%; height: auto; }
+      .card .label, .card .name, .slab .name {
+        font-size: 9.3px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: #4a3d31;
+        /* #216: pinned line-height — `normal` is font-metric dependent, so the
+           label moved 1 css px when the face swapped in over the fallback. */
+        line-height: 11px;
+        text-align: center; padding: 3px 1px 6px; background: #fffdf6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .card.locked, .slab.locked {
+        background: #f4ebd8;
+        box-shadow: 0 1px 0 rgba(255,255,255,.9) inset, 0 2px 6px rgba(97,62,32,.18), 0 0 0 1.5px rgba(63,50,39,.5);
+      }
+      .card.locked .label, .card.locked .name, .slab.locked .name {
+        background: #f4ebd8;
+        color: #4a3d31;
+        padding: 3px 1px 6px;
+      }
+      .locked-banner, .card-locked-header {
+        position: static;
+        background: #3f3227; color: #f8ecd8;
+        font-size: 8px; font-weight: 800; letter-spacing: .18em;
+        padding: 3px 0 2px; text-align: center; text-transform: uppercase;
+      }
+
+      /* #303 proposal 3 — decay/war lock into the draft. card-earn's mirror:
+         heavier, settling downward rather than bouncing up — no overshoot,
+         ease-in instead of ease-out, the "bad news lands and stays" read. */
+      @keyframes card-locked-in {
+        0%   { opacity: 0; transform: translateY(-8px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+      .card.locked-in { animation: card-locked-in 420ms ease-in; }
+
+      /* #71: Idle Producers & Want Marks */
+      #board g.tile.idle {
+        opacity: 0.58;
+      }
+      .want-mark, .construction-stakes {
+        pointer-events: none;
+      }
+
+      /* Board Gains & Animations */
+      @keyframes gain-rise {
+        0%   { opacity: 0; transform: translateY(6px) scale(0.9); }
+        18%  { opacity: 1; transform: translateY(0) scale(1); }
+        100% { opacity: 0; transform: translateY(-22px) scale(1); }
+      }
+      #board .gain { animation: gain-rise 900ms ease-out forwards; }
+
+      /* #369: the same landing as the 3D painter's, in the form CSS can carry —
+         an 8-unit drop on the shared ease-out over 300 of the 380 ms, then the
+         1.03 overshoot leaving over the last 80. render.ts's LAND_MS,
+         LAND_DROP_MS, LAND_RISE and LAND_OVERSHOOT are the owners of these
+         numbers and painter.test.ts holds this rule to them. */
+      @keyframes tile-land {
+        0%     { transform: translateY(-8px) scale(1); opacity: 0.35;
+                 animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+        78.94% { transform: translateY(0) scale(1); opacity: 1;
+                 animation-timing-function: linear; }
+        78.95% { transform: translateY(0) scale(1.03); opacity: 1;
+                 animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+        100%   { transform: translateY(0) scale(1); opacity: 1; }
+      }
+      #board g.tile.land {
+        transform-box: fill-box; transform-origin: center;
+        animation: tile-land 380ms linear both;
+      }
+
+      @keyframes term-show {
+        0%   { opacity: 0; }
+        16%  { opacity: 1; }
+        70%  { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      #board .term { animation: term-show 900ms ease-out forwards; }
+
+      /* Run Menu Sheet */
+      #sheet, .scrim {
+        position: absolute; inset: 0; display: none; z-index: 8;
+        align-items: flex-end; justify-content: center;
+        padding: 0 16px 20px;
+        background: rgba(59, 42, 28, 0.38);
+      }
+      #sheet.open { display: flex; }
+      #sheetcard, .sheet {
+        width: 100%; max-width: 352px;
+        background: #fffcf3; border-radius: 20px;
+        padding: 12px; display: flex; flex-direction: column; gap: 8px;
+        box-shadow: 0 14px 40px rgba(50, 28, 16, 0.4);
+      }
+      #sheetcard button, .sheet button {
+        appearance: none; border: 0; cursor: pointer; font: inherit;
+        width: 100%; height: 50px; border-radius: 12px;
+        font-size: 16px; font-weight: 800; font-family: 'Gantari', sans-serif;
+        background: #f3e8d3; color: #3f3227;
+      }
+      #sheetcard #resume, #sheetcard button.primary, .sheet button.primary { background: #3f3227; color: #f8ecd8; }
+      #sheetcard button:active, .sheet button:active { transform: scale(0.985); }
+
+      /* #71: Realm Flow Readout */
+      .realm-flow {
+        background: #f4ebd8;
+        border-radius: 14px;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        border: 1px solid rgba(97, 62, 32, 0.12);
+      }
+      .realm-flow-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 10px;
+        /* #216: pinned line-height — `normal` is font-metric dependent, so the
+           row changed height when the face swapped in over the fallback. */
+        line-height: 13px;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: rgba(97, 62, 32, 0.6);
+      }
+      .realm-flow-status.warn {
+        color: #b3543f;
+      }
+      .realm-flow-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .flow-kind-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        /* #216: pinned line-height — `normal` is font-metric dependent, so the
+           row changed height when the face swapped in over the fallback. */
+        line-height: 15px;
+        font-weight: 700;
+        color: #3f3227;
+        font-variant-numeric: tabular-nums;
+      }
+      .flow-kind-row.short .short-val {
+        color: #b3543f;
+        font-weight: 800;
+      }
+
+      /* Museum Gallery Sheet (#40) */
+      #museumsheet.open { display: flex; }
+      #museumcard {
+        max-height: 80vh;
+        padding: 16px 14px 14px;
+      }
+      .museum-header {
+        text-align: center;
+        padding: 2px 0 8px;
+        border-bottom: 1px solid rgba(97, 62, 32, 0.12);
+      }
+      .museum-over {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .22em;
+        text-transform: uppercase;
+        color: rgba(97, 62, 32, 0.55);
+      }
+      .museum-heading {
+        font-family: 'Lora', Georgia, serif;
+        font-style: italic;
+        font-size: 20px;
+        font-weight: 700;
+        color: #3f3227;
+        margin-top: 2px;
+      }
+      .museum-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 52vh;
+        overflow-y: auto;
+        padding: 6px 2px;
+        -webkit-overflow-scrolling: touch;
+      }
+      .museum-entry {
+        background: #fffdf6;
+        border: 1px solid rgba(97, 62, 32, 0.14);
+        border-radius: 14px;
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(97, 62, 32, 0.08);
+        transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+      }
+      .museum-entry:active {
+        transform: scale(0.985);
+      }
+      /* #175: era-correct frames — a kept realm wears its age. Era 1 keeps the
+         parchment card; era 2 takes the industrial frame (soot border, khaki
+         wash, steel-dark thumb) that the era-2 board itself wears (#174). */
+      .museum-entry.museum-era-2 {
+        background: #f3ecdc;
+        border-color: rgba(74, 64, 50, 0.38);
+        box-shadow: 0 2px 6px rgba(60, 52, 40, 0.16), inset 0 1px 0 rgba(255, 253, 246, 0.6);
+      }
+      .museum-entry.museum-era-2 .museum-thumb {
+        background: linear-gradient(135deg, #c9b98e 0%, #7d7256 100%);
+        box-shadow: inset 0 0 0 1px rgba(60, 52, 40, 0.3);
+      }
+      .museum-entry.museum-era-2 .museum-seed-line {
+        color: rgba(74, 64, 50, 0.7);
+      }
+      .museum-thumb {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #f2dcbe 0%, #dd9d84 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        box-shadow: inset 0 0 0 1px rgba(97, 62, 32, 0.15);
+      }
+      .museum-thumb svg {
+        width: 26px;
+        height: 26px;
+      }
+      .museum-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .museum-seed-line {
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: rgba(97, 62, 32, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .museum-score-line {
+        font-size: 14px;
+        font-weight: 800;
+        color: #3f3227;
+        font-variant-numeric: tabular-nums;
+      }
+      .museum-score-line b {
+        font-size: 17px;
+        font-weight: 900;
+      }
+      .museum-ending {
+        /* #175: the ending is the entry's epitaph, set like the museum's own
+           heading — not a metadata whisper. */
+        font-family: 'Lora', Georgia, serif;
+        font-style: italic;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: rgba(63, 50, 39, 0.78);
+      }
+      .museum-empty {
+        text-align: center;
+        padding: 28px 16px;
+        font-family: 'Lora', Georgia, serif;
+        font-style: italic;
+        font-size: 15px;
+        color: rgba(74, 58, 41, 0.7);
+      }
+
+      /* Placards: End of Run, TierUp, FirstRun */
+      .placard, #overcard, #tierupcard {
+        pointer-events: auto; width: 100%; max-width: 342px; position: relative;
+        background: #fffcf3; border-radius: 16px;
+        padding: 20px 22px 18px; text-align: center;
+        display: flex; flex-direction: column; align-items: center;
+        box-shadow: 0 12px 34px rgba(60, 30, 20, 0.35);
+      }
+      .placard .frameline, #overcard .frameline, #tierupcard .frameline, #coachcard .frameline {
+        position: absolute; inset: 7px;
+        border: 1px solid rgba(97, 62, 32, 0.22); border-radius: 11px;
+        pointer-events: none;
+      }
+      .placard .over, #overtitle, #tieruptitle, #coachtitle {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .22em;
+        text-transform: uppercase; color: rgba(97, 62, 32, 0.55);
+      }
+      .placard .line, #oversummary, #tierupsummary, #coachline {
+        font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 17px;
+        color: #3f3227; margin: 8px 0 2px; text-wrap: balance;
+      }
+      /* FirstRun artboard: the coach line carries margin-top 7px only */
+      #coachline { margin: 7px 0 0; }
+      .placard .line b, #oversummary b, #tierupsummary b {
+        font-style: normal; font-weight: 700; font-size: 26px; letter-spacing: -.01em;
+      }
+      #tierupsub {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+        color: rgba(97, 62, 32, 0.55); margin-top: 6px;
+      }
+      .placard .rule, #overcard .rule, #tierupcard .rule {
+        width: 52px; height: 1px; background: rgba(97, 62, 32, 0.3);
+        margin: 11px auto 13px;
+      }
+      .btn-ink, #newrun, #tierupcontinue {
+        appearance: none; border: 0; cursor: pointer; font: inherit;
+        background: #3f3227; color: #f8ecd8;
+        font-size: 16px; font-weight: 800; font-family: 'Gantari', sans-serif;
+        border-radius: 12px; height: 48px; min-width: 170px; padding: 0 24px;
+      }
+      .btn-ink:active, #newrun:active, #tierupcontinue:active { transform: scale(0.985); }
+
+      #over, #tierup {
+        position: absolute; left: 24px; right: 24px; bottom: 26px; display: none;
+        justify-content: center; pointer-events: none;
+        z-index: 7;
+      }
+
+      /* FirstRun Coach */
+      #coachcard {
+        position: absolute; left: 24px; right: 24px; top: 64px;
+        background: #fffcf3; border-radius: 16px; padding: 16px 18px; text-align: center;
+        box-shadow: 0 12px 34px rgba(60,30,20,.3); z-index: 8;
+      }
+      #coachskip {
+        position: absolute; top: 16.5px; right: 19px;
+        min-width: 44px; min-height: 44px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 13px; font-weight: 800; color: #fffaf0;
+        text-shadow: 0 1px 2px rgba(97,62,32,.5), 0 2px 6px rgba(97,62,32,.3);
+        background: transparent; border: 0; cursor: pointer; font-family: inherit;
+        z-index: 9;
+      }
+      #spotlight {
+        position: absolute; inset: 0; pointer-events: none; z-index: 4;
+      }
+
+      /* TierUp Capacity Tooltip */
+      #tierupcapacity {
+        position: absolute; inset: 0; pointer-events: none; z-index: 7;
+      }
+      #tierupchip {
+        position: absolute; left: 150px; top: 292px; width: 90px;
+        background: rgba(255,252,243,.96); border-radius: 10px; padding: 6px 8px; text-align: center;
+        box-shadow: 0 3px 10px rgba(97,62,32,.25);
+      }
+      #tierupcapcount {
+        font-size: 15px; font-weight: 900; color: #3f3227; font-variant-numeric: tabular-nums;
+      }
+      #tierupchip .caplabel {
+        font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(74,58,41,.6);
+      }
+      #tieruptri {
+        position: absolute; left: 191px; top: 332px; width: 8px; height: 8px;
+        background: rgba(255,252,243,.96); transform: rotate(45deg);
+      }
+
+      /* #110: Long-press peek overlay on city/settlement */
+      #peekoverlay {
+        position: absolute;
+        z-index: 15;
+        width: 240px;
+        background: rgba(255, 252, 243, 0.98);
+        border: 1px solid rgba(97, 62, 32, 0.2);
+        border-radius: 14px;
+        padding: 10px 12px;
+        box-shadow: 0 8px 24px rgba(60, 30, 20, 0.28);
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-family: 'Gantari', sans-serif;
+        color: #3f3227;
+      }
+      .peek-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid rgba(97, 62, 32, 0.12);
+        padding-bottom: 4px;
+      }
+      .peek-title {
+        font-size: 13px;
+        font-weight: 900;
+        color: #3f3227;
+      }
+      .peek-tier {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: rgba(97, 62, 32, 0.65);
+        margin-left: 4px;
+      }
+      .peek-badge {
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      .peek-badge.linked {
+        background: rgba(84, 140, 53, 0.15);
+        color: #3f7a4e;
+      }
+      .peek-badge.unlinked {
+        background: rgba(179, 84, 63, 0.15);
+        color: #b3543f;
+      }
+      .peek-badge.neutral {
+        background: rgba(97, 62, 32, 0.12);
+        color: #5c4430;
+      }
+      .peek-badge.warn {
+        background: rgba(179, 84, 63, 0.15);
+        color: #b3543f;
+      }
+      .peek-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11.5px;
+        font-weight: 700;
+      }
+      .peek-label {
+        color: rgba(97, 62, 32, 0.7);
+      }
+      .peek-val {
+        color: #3f3227;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+      }
+      .peek-buildings {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        background: rgba(244, 235, 216, 0.6);
+        border-radius: 8px;
+        padding: 5px 7px;
+        margin: 2px 0;
+      }
+      .peek-building-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .peek-building-item.starved {
+        color: #b3543f;
+      }
+      .peek-building-item.starved .peek-building-name::after {
+        content: ' (starved)';
+        font-size: 9px;
+        font-weight: 800;
+      }
+      .peek-building-item.idle {
+        color: rgba(97, 62, 32, 0.6);
+      }
+      .peek-building-item.idle .peek-building-name::after {
+        content: ' (idle)';
+        font-size: 9px;
+        font-weight: 800;
+      }
+      .peek-demand {
+        margin-top: 2px;
+        padding: 4px 6px;
+        border-radius: 8px;
+        background: #f4ebd8;
+        font-size: 11px;
+        font-weight: 800;
+        text-align: center;
+      }
+      .peek-demand.fed {
+        color: #3f7a4e;
+      }
+      .peek-demand.unfed {
+        color: #b3543f;
+        background: rgba(255, 246, 238, 0.96);
+        border: 1px solid rgba(179, 84, 63, 0.3);
+      }
+      .peek-demand.neutral {
+        color: #5c4430;
+        background: rgba(244, 235, 216, 0.6);
+      }
+      /* #177: the hex's history in its peek */
+      .peek-history {
+        margin-top: 6px;
+        padding-top: 5px;
+        border-top: 1px solid rgba(97, 62, 32, 0.14);
+      }
+      .peek-history-title {
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: .18em;
+        text-transform: uppercase;
+        color: rgba(97, 62, 32, 0.55);
+        margin-bottom: 3px;
+      }
+      .peek-history-row {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #3f3227;
+        line-height: 1.45;
+      }
+      .peek-history-turn {
+        color: rgba(97, 62, 32, 0.6);
+        font-variant-numeric: tabular-nums;
+      }
+      /* #177: the run-level chronicle in the menu sheet */
+      .run-chronicle {
+        margin-top: 10px;
+        max-height: 132px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .run-chronicle:empty {
+        display: none;
+      }
+      .run-chronicle-title {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .22em;
+        text-transform: uppercase;
+        color: rgba(97, 62, 32, 0.55);
+        text-align: center;
+        margin-bottom: 4px;
+      }
+      .run-chronicle-row {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #3f3227;
+        line-height: 1.5;
+        text-align: left;
+      }
+      .run-chronicle-row b {
+        color: rgba(97, 62, 32, 0.6);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Burn button */
+      #burn {
+        appearance: none; border: 0; cursor: pointer; font: inherit;
+        background: #9e3d2b; color: #ffffff;
+        font-size: 13.5px; font-weight: 800; border-radius: 12px;
+        height: 48px; min-width: 220px; padding: 0 16px;
+        display: none; align-items: center; justify-content: center;
+        box-shadow: 0 2px 8px rgba(158, 61, 43, 0.25);
+      }
+      #burn:active { transform: scale(0.97); }
+
+      /* Moments Motion (#94) */
+      /* TierUp Moment Animations */
+      @keyframes tierup-dash-flow {
+        0%   { stroke-dashoffset: 16; opacity: 0.3; }
+        100% { stroke-dashoffset: 0; opacity: 1; }
+      }
+      @keyframes tierup-neighbor-fold {
+        0%   { transform: scale(1.08); opacity: 0.85; }
+        100% { transform: scale(1); opacity: 0.3; }
+      }
+      @keyframes tierup-glow-enter {
+        0%   { transform: scale(0.75); opacity: 0.25; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      #board .tierup-visual-moment .tierup-merge-arc {
+        animation: tierup-dash-flow 280ms ease-out forwards;
+      }
+      #board .tierup-visual-moment .tierup-neighbor-fold {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: tierup-neighbor-fold 280ms ease-out forwards;
+      }
+      #board .tierup-visual-moment .tierup-glow {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: tierup-glow-enter 280ms ease-out forwards;
+      }
+
+      /* Moment Sheet Entrance */
+      @keyframes moment-sheet-enter {
+        0%   { opacity: 0; transform: translateY(14px) scale(0.97); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      #tierupcard.entering {
+        animation: moment-sheet-enter 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      #tierupchip.entering {
+        animation: moment-sheet-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      /* #303: the museum label at run end enters like the tier-up sheet — once,
+         on the paint where the run turns ended (main.ts `showOver` gates the
+         class on that transition, so a resumed or fixture-ended run paints it
+         settled at boot, and the menu opening over it does not replay it). */
+      #overcard.entering {
+        animation: moment-sheet-enter 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+
+      /* Era Sweep Pass */
+      @keyframes era-sweep-pass {
+        0%   { opacity: 0; transform: translate3d(-100%, -100%, 0) rotate(25deg); }
+        25%  { opacity: 0.7; }
+        75%  { opacity: 0.7; }
+        100% { opacity: 0; transform: translate3d(100%, 100%, 0) rotate(25deg); }
+      }
+      .era-sweep {
+        position: absolute;
+        inset: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+          135deg,
+          transparent 35%,
+          rgba(245, 195, 110, 0.35) 45%,
+          rgba(255, 235, 180, 0.55) 50%,
+          rgba(245, 195, 110, 0.35) 55%,
+          transparent 65%
+        );
+        pointer-events: none;
+        z-index: 6;
+        animation: era-sweep-pass 300ms ease-out forwards;
+      }
+
+      /* #303 proposal 2 — Weather Strike Flash. Same era-sweep-pass keyframe
+         (opacity/transform only, no colour baked in), same box model; the
+         gradient's colour stops are set inline per strike from the event's
+         own catalogue colour (data/events.json), so a new weather card never
+         needs a second colour table maintained here. */
+      .weather-strike {
+        position: absolute;
+        inset: -50%;
+        width: 200%;
+        height: 200%;
+        pointer-events: none;
+        z-index: 6;
+        animation: era-sweep-pass 300ms ease-out forwards;
+      }
+
+      /* Quest Payout Resolution */
+      @keyframes quest-payout-resolve {
+        0%   { opacity: 0; transform: translateY(4px) scale(0.85); }
+        25%  { opacity: 1; transform: translateY(-8px) scale(1.08); }
+        80%  { opacity: 1; transform: translateY(-18px) scale(1); }
+        100% { opacity: 0; transform: translateY(-26px) scale(0.95); }
+      }
+      #board .quest-payout-chip {
+        animation: quest-payout-resolve 300ms ease-out forwards;
+      }
+
+      /* Brink-Buy Offer & Resolution */
+      @keyframes buy-offer-pulse {
+        0%   { transform: scale(0.94); }
+        50%  { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
+      #deck.live-offer {
+        animation: buy-offer-pulse 280ms ease-out;
+      }
+
+      @keyframes buy-card-resolve {
+        0%   { opacity: 0.3; transform: translateY(12px) scale(0.88); }
+        60%  { transform: translateY(-4px) scale(1.04); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .card.buy-resolved {
+        animation: buy-card-resolve 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      /* Reduced Motion */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-gaJy9sHk.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DKLIZ_5X.css">
+  </head>
+  <body>
+    <div id="app">
+      <svg id="board"></svg>
+      <button id="menu" class="hexbtn" type="button" aria-label="Menu">
+        <span class="hexface">
+          <svg viewBox="0 0 19 14" aria-hidden="true">
+            <rect x="0" y="0" width="19" height="2.4" rx="1.2" />
+            <rect x="0" y="5.8" width="19" height="2.4" rx="1.2" />
+            <rect x="0" y="11.6" width="19" height="2.4" rx="1.2" />
+          </svg>
+        </span>
+      </button>
+      <div id="stamp"></div>
+      <div id="fps" style="display:none"></div>
+      <!-- #257: the skill circle — empty markup; the icons are the run's
+           roster, built, laid out and owned by main.ts (ADR 0013 amendment:
+           input is never the renderer's). It replaces #231's #actionbar rail. -->
+      <div id="skills" role="toolbar" aria-label="Skills"></div>
+      <div id="hud">
+        <!-- #205 (reopened): the corner keeps the score and the coin count —
+             the vision bar's whole HUD. The next-card track lives in the
+             run-menu sheet; the resource row surfaces only its alarm. -->
+        <div id="score">0</div>
+        <div id="ledger">
+          <span id="ledgericon" class="coin"></span>
+          <b id="ledgerbal">0</b>
+          <span id="ledgernet">+ 0</span>
+          <span id="creditrunway" aria-hidden="true">
+            <span id="creditfraction"><b id="creditremaining">0</b>/<span id="creditceiling">0</span></span>
+            <span id="credittrack"><i id="creditfill"></i></span>
+          </span>
+          <span id="ledgerwarn" aria-live="polite"></span>
+        </div>
+      </div>
+      <div id="deck" class="deckstack">
+        <!-- #91: static boot twin of render.ts's deckChipSvg (standard kind,
+             count 0) — the pre-JS first paint. The drawing's ONE owner is
+             deckChipSvg; this markup cannot import, so it is the named
+             permitted twin and must not drift from it. -->
+        <svg viewBox="0 0 64 88" aria-hidden="true">
+          <g transform="rotate(-7 32 50)">
+            <rect x="15" y="20" width="46" height="62" rx="8" fill="#f3ecdc" stroke="rgba(97,62,32,0.14)" stroke-width="1"></rect>
+          </g>
+          <g transform="rotate(4 32 50)">
+            <rect x="12" y="17" width="46" height="62" rx="8" fill="#f9f3e6" stroke="rgba(97,62,32,0.14)" stroke-width="1"></rect>
+          </g>
+          <g>
+            <rect x="9" y="14" width="46" height="62" rx="8" fill="#fffdf6" stroke="rgba(97,62,32,0.14)" stroke-width="1"></rect>
+            <polygon points="43.3,33.5 43.3,46.5 32.0,53.0 20.7,46.5 20.7,33.5 32.0,27.0" fill="rgba(74,56,38,0.18)"></polygon>
+            <polygon points="43.3,31.5 43.3,44.5 32.0,51.0 20.7,44.5 20.7,31.5 32.0,25.0" fill="#8fae56"></polygon>
+            <circle cx="28" cy="38" r="2.6" fill="#54803c"></circle>
+            <circle cx="36.4" cy="34.6" r="2.1" fill="#67914a"></circle>
+            <circle cx="34" cy="42" r="1.7" fill="#4a7538"></circle>
+            <text id="deckcount" x="32" y="70" text-anchor="middle" font-family="'Gantari',sans-serif" font-size="19" font-weight="900" fill="#3f3227">0</text>
+          </g>
+        </svg>
+      </div>
+      <div id="tray">
+        <div id="cardhint"></div>
+        <div id="cardnote"></div>
+        <div id="hand"></div>
+        <button id="burn" type="button">Burn card (costs 1 card, 1 turn)</button>
+      </div>
+      
+      <!-- Run menu sheet -->
+      <div id="sheet" role="dialog" aria-modal="true" aria-label="Run menu">
+        <div id="sheetcard">
+          <!-- #205 (reopened): the next-card track left the at-rest HUD for
+               this sheet — summon-on-demand, same element, same owner. -->
+          <div id="reward">
+            <div id="rewardlabel"></div>
+            <div id="rewardbar"><i id="rewardfill"></i></div>
+          </div>
+          <div id="realmflow" class="realm-flow"></div>
+          <div id="runchronicle" class="run-chronicle"></div>
+          <button id="resume" class="primary" type="button">Resume</button>
+          <button id="numbersmode" type="button"></button>
+          <button id="fpsmode" type="button"></button>
+          <button id="tutorialmode" type="button"></button>
+          <button id="debugmode" type="button"></button>
+          <!-- #192: the board painter is a presentation setting (owner ruling 31 Aug 2026) -->
+          <button id="renderermode" type="button"></button>
+          <div id="debugarea" class="debug-area" style="display:none"></div>
+          <button id="restart" type="button">Restart this seed</button>
+          <button id="newseed" type="button">New run</button>
+          <button id="museum" type="button">Museum</button>
+        </div>
+      </div>
+
+      <!-- Museum gallery sheet (#40) -->
+      <div id="museumsheet" class="scrim" role="dialog" aria-modal="true" aria-label="Museum gallery">
+        <div id="museumcard" class="sheet">
+          <div class="museum-header">
+            <div class="museum-over">Archive</div>
+            <div class="museum-heading">The Museum</div>
+          </div>
+          <div id="museumlist" class="museum-list">
+            <!-- Dynamically populated archive run cards -->
+          </div>
+          <button id="museumback" type="button">Back</button>
+        </div>
+      </div>
+
+      <!-- FirstRun coach -->
+      <div id="firstruncoach" style="display:none">
+        <div id="spotlight"></div>
+        <svg id="coachsvg" viewBox="0 0 390 844" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4">
+          <path id="coacharrow" d="M170,692 C192,640 232,544 256,490" fill="none" stroke="rgba(255,252,244,0.9)" stroke-width="2.5" stroke-dasharray="1 7" stroke-linecap="round"></path>
+          <polygon id="coacharrowhead" points="262,477 250,487 262,493" fill="rgba(255,252,244,0.95)"></polygon>
+        </svg>
+        <div id="coachcard">
+          <div class="frameline"></div>
+          <!-- #90: no placeholder sentences — the coach's lines live in main.ts,
+               which writes them before this hidden card is ever shown. -->
+          <div id="coachtitle"></div>
+          <div id="coachline"></div>
+        </div>
+        <button id="coachskip" type="button">Skip</button>
+      </div>
+
+      <!-- TierUp moment card & chip -->
+      <div id="tierupcapacity" style="display:none">
+        <div id="tierupchip">
+          <div id="tierupcapcount"></div>
+          <div class="caplabel">SLOTS</div>
+        </div>
+        <div id="tieruptri"></div>
+      </div>
+      <!-- Long-press container peek overlay (#110) -->
+      <div id="peekoverlay" style="display:none"></div>
+      <div id="tierup">
+        <div id="tierupcard">
+          <div class="frameline"></div>
+          <!-- #90: no placeholder sentences — the moment showing owns all three
+               lines (main.ts writes them before this hidden card is shown). -->
+          <div id="tieruptitle"></div>
+          <div id="tierupsummary"></div>
+          <div id="tierupsub"></div>
+          <div class="rule"></div>
+          <button id="tierupcontinue" class="btn-ink" type="button">Continue</button>
+        </div>
+      </div>
+
+      <!-- End of run card -->
+      <div id="over">
+        <div id="overcard">
+          <div class="frameline"></div>
+          <div id="overtitle"></div>
+          <div id="oversummary"></div>
+          <div class="rule"></div>
+          <button id="newrun" class="btn-ink" type="button">New run</button>
+          <button id="overback" class="btn-ink" type="button" style="display:none">Back to Museum</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
