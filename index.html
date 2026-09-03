@@ -10,7 +10,7 @@
          with no network, first paint and the module script behind it waited for
          the request to fail (white for 5-15 s, the #212 airplane-mode frames).
          Fonts must never gate first paint — this sheet is same-origin and its
-         faces swap in over the system fallback stack below. -->
+         faces swap in over the system fallback stack below. -->
     <!-- #354: the two Lora faces the placards are set in (the summary line's
          italic and its bold figures). A face is only fetched when text first
          lays out in it, and the end-of-run placard is that first text — so the
@@ -85,7 +85,7 @@
       /* Menu button — at rest the three bars alone on the sky, the hex face
          only under the thumb. */
       #menu, .hexbtn {
-        position: absolute; top: 20px; left: 18px; width: 48px; height: 48px; border: 0; padding: 0; cursor: pointer;
+        position: absolute; top: calc(20px + env(safe-area-inset-top)); left: calc(18px + env(safe-area-inset-left)); width: 48px; height: 48px; border: 0; padding: 0; cursor: pointer;
         background: transparent;
         z-index: 5;
       }
@@ -107,7 +107,7 @@
 
       /* Build Stamp */
       #stamp, .stamp {
-        position: absolute; top: 72px; left: 20px;
+        position: absolute; top: calc(72px + env(safe-area-inset-top)); left: calc(20px + env(safe-area-inset-left));
         font-size: 9.5px; font-weight: 700; font-family: 'Gantari', monospace;
         color: rgba(97,62,32,.5); pointer-events: none;
         letter-spacing: 0.3px;
@@ -116,7 +116,7 @@
 
       /* #164: the FPS meter — exists only while the toggle is on */
       #fps {
-        position: absolute; top: 84px; left: 20px;
+        position: absolute; top: calc(84px + env(safe-area-inset-top)); left: calc(20px + env(safe-area-inset-left));
         font-size: 9.5px; font-weight: 700; font-family: 'Gantari', monospace;
         color: rgba(97,62,32,.55); pointer-events: none;
         font-variant-numeric: tabular-nums;
@@ -137,7 +137,7 @@
 
       /* HUD */
       #hud, .hud {
-        position: absolute; top: 20px; right: 18px;
+        position: absolute; top: calc(20px + env(safe-area-inset-top)); right: calc(18px + env(safe-area-inset-right));
         display: flex; flex-direction: column; align-items: flex-end;
         pointer-events: none;
         z-index: 5;
@@ -447,7 +447,7 @@
 
       /* Deck Stack */
       #deck, .deckstack {
-        position: absolute; right: 10px; bottom: 16px; width: 64px; height: 88px;
+        position: absolute; right: calc(10px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); width: 64px; height: 88px;
         pointer-events: none; z-index: 7;
         filter: drop-shadow(0 3px 5px rgba(97,62,32,.22));
         display: flex;
@@ -478,7 +478,7 @@
       /* Tray and Hand */
       #tray, .tray {
         position: absolute; left: 0; right: 0; bottom: 0;
-        padding: 10px 14px 20px;
+        padding: 10px calc(14px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
         display: flex; flex-direction: column; align-items: center; gap: 9px;
         background: rgba(250,240,222,.95);
         border-top: 1px solid rgba(97,62,32,.12);
@@ -609,7 +609,7 @@
       #sheet, .scrim {
         position: absolute; inset: 0; display: none; z-index: 8;
         align-items: flex-end; justify-content: center;
-        padding: 0 16px 20px;
+        padding: env(safe-area-inset-top) calc(16px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
         background: rgba(59, 42, 28, 0.38);
       }
       #sheet.open { display: flex; }
@@ -843,19 +843,19 @@
       .btn-ink:active, #newrun:active, #tierupcontinue:active { transform: scale(0.985); }
 
       #over, #tierup {
-        position: absolute; left: 24px; right: 24px; bottom: 26px; display: none;
+        position: absolute; left: calc(24px + env(safe-area-inset-left)); right: calc(24px + env(safe-area-inset-right)); bottom: calc(26px + env(safe-area-inset-bottom)); display: none;
         justify-content: center; pointer-events: none;
         z-index: 7;
       }
 
       /* FirstRun Coach */
       #coachcard {
-        position: absolute; left: 24px; right: 24px; top: 64px;
+        position: absolute; left: calc(24px + env(safe-area-inset-left)); right: calc(24px + env(safe-area-inset-right)); top: calc(64px + env(safe-area-inset-top));
         background: #fffcf3; border-radius: 16px; padding: 16px 18px; text-align: center;
         box-shadow: 0 12px 34px rgba(60,30,20,.3); z-index: 8;
       }
       #coachskip {
-        position: absolute; top: 16.5px; right: 19px;
+        position: absolute; top: calc(16.5px + env(safe-area-inset-top)); right: calc(19px + env(safe-area-inset-right));
         min-width: 44px; min-height: 44px;
         display: inline-flex; align-items: center; justify-content: center;
         font-size: 13px; font-weight: 800; color: #fffaf0;
@@ -1208,7 +1208,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-DyirhJv6.js"></script>
+    <script type="module" crossorigin src="./assets/index-B2wk4URq.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DKLIZ_5X.css">
   </head>
   <body>
@@ -1365,6 +1365,6 @@
           <button id="overback" class="btn-ink" type="button" style="display:none">Back to Museum</button>
         </div>
       </div>
-    </div>
+    </div>
   </body>
 </html>
