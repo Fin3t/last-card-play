@@ -145,8 +145,8 @@
       }
       #score, .score {
         font-size: 38px; font-weight: 900; line-height: 1; letter-spacing: -.02em;
-        color: #fffaf0;
-        text-shadow: 0 2px 2px rgba(97,62,32,.35), 0 6px 18px rgba(97,62,32,.35);
+        color: #3f3227;
+        text-shadow: 0 1px 0 rgba(255,250,240,.4), 0 5px 16px rgba(97,62,32,.18);
         font-variant-numeric: tabular-nums;
       }
       /* #205 (reopened): the next-card track's home is the sheet — full width
@@ -502,7 +502,7 @@
          strike, a tapped quest, a locked draft, the coach) keeps the full
          register above. main.ts's redrawTeaching says which is which. */
       #cardhint.quiet, #cardnote.quiet {
-        font-size: 11px; color: rgba(74,58,41,.58);
+        font-size: 11px; color: #5f4936;
       }
       #cardhint:empty, #cardnote:empty { display: none; }
       #hand, .hand { display: flex; gap: 12px; touch-action: none; align-items: flex-end; }
@@ -690,6 +690,7 @@
         max-height: 80vh;
         padding: 16px 14px 14px;
       }
+      #app.museum-open #tray, #app.museum-open #deck { visibility: hidden; }
       .museum-header {
         text-align: center;
         padding: 2px 0 8px;
@@ -837,7 +838,7 @@
       }
       #tierupsub {
         font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
-        color: rgba(97, 62, 32, 0.55); margin-top: 6px;
+        color: #5f4936; margin-top: 6px;
       }
       .placard .rule, #overcard .rule, #tierupcard .rule {
         width: 52px; height: 1px; background: rgba(97, 62, 32, 0.3);
@@ -1217,7 +1218,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-CTeAUIt-.js"></script>
+    <script type="module" crossorigin src="./assets/index-BcSKDDZy.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DKLIZ_5X.css">
   </head>
   <body>
@@ -1273,7 +1274,7 @@
             <circle cx="28" cy="38" r="2.6" fill="#54803c"></circle>
             <circle cx="36.4" cy="34.6" r="2.1" fill="#67914a"></circle>
             <circle cx="34" cy="42" r="1.7" fill="#4a7538"></circle>
-            <text id="deckcount" x="32" y="70" text-anchor="middle" font-family="'Gantari',sans-serif" font-size="19" font-weight="900" fill="#3f3227">0</text>
+            <text id="deckcount" x="32" y="70" text-anchor="middle" font-family="'Gantari',sans-serif" font-size="17" font-weight="900" fill="#3f3227">0</text>
           </g>
         </svg>
       </div>
@@ -1321,7 +1322,7 @@
           <div id="museumlist" class="museum-list">
             <!-- Dynamically populated archive run cards -->
           </div>
-          <button id="museumback" type="button">Back</button>
+          <button id="museumback" class="primary" type="button">Back</button>
         </div>
       </div>
 
