@@ -474,6 +474,36 @@
       }
       #deck.tick { animation: deck-tick 480ms ease-out; }
 
+      /* #470: deployment state, not HUD chrome. It remains fixed while the
+         tray yields and clears the phone's home-indicator safe area. */
+      #build-update {
+        position: absolute;
+        left: calc(14px + env(safe-area-inset-left));
+        right: calc(14px + env(safe-area-inset-right));
+        bottom: calc(126px + env(safe-area-inset-bottom));
+        z-index: 24;
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        max-width: 430px;
+        margin: 0 auto;
+        padding: 10px 10px 10px 14px;
+        border: 1px solid rgba(255, 252, 243, .48);
+        border-radius: 14px;
+        background: #3f3227;
+        color: #fffaf0;
+        box-shadow: 0 8px 24px rgba(38, 25, 17, .3);
+        pointer-events: auto;
+      }
+      #build-update.visible { display: flex; }
+      #build-update-message { font-size: 13px; line-height: 1.25; font-weight: 750; }
+      #build-update-reload {
+        appearance: none; border: 0; border-radius: 10px; min-width: 88px;
+        min-height: 44px; padding: 0 15px; cursor: pointer;
+        background: #fffaf0; color: #3f3227; font: 800 14px 'Gantari', sans-serif;
+      }
+
       @keyframes card-earn {
         0%   { transform: translateY(0) scale(1); }
         30%  { transform: translateY(-10px) scale(1.08); }
@@ -1218,7 +1248,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-2cTbnJKZ.js"></script>
+    <script type="module" crossorigin src="./assets/index-CyldMZKp.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DKLIZ_5X.css">
   </head>
   <body>
@@ -1254,6 +1284,10 @@
           </span>
           <span id="ledgerwarn" aria-live="polite"></span>
         </div>
+      </div>
+      <div id="build-update" role="status" aria-live="polite">
+        <span id="build-update-message">A new version is ready.</span>
+        <button id="build-update-reload" type="button">Reload</button>
       </div>
       <div id="deck" class="deckstack">
         <!-- #91: static boot twin of render.ts's deckChipSvg (standard kind,
