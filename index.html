@@ -437,6 +437,12 @@
         opacity: 0;
         transition: opacity 140ms ease-out;
       }
+      #board3d-labels { z-index: 1; }
+      #board3d-labels .placard3d[data-quest-id] {
+        pointer-events: auto; touch-action: none; cursor: pointer;
+        -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+      }
+      #board3d-labels .placard3d[data-quest-id]:focus-visible { outline: 2px solid #4a3d31; outline-offset: 3px; }
       /* the stem back down to the landmark the card names */
       #board3d-labels .placard3d::after {
         content: ''; position: absolute; left: calc(50% + var(--stem-dx, 0px)); top: 100%;
@@ -1074,6 +1080,9 @@
         font-size: 11.5px;
         font-weight: 700;
       }
+      #peekoverlay[data-quest-id] .peek-row { align-items: flex-start; gap: 10px; }
+      #peekoverlay[data-quest-id] .peek-label { flex: none; }
+      #peekoverlay[data-quest-id] .peek-val { text-align: right; }
       .peek-label {
         color: rgba(97, 62, 32, 0.7);
       }
@@ -1327,7 +1336,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-sHuwe0E5.js"></script>
+    <script type="module" crossorigin src="./assets/index-DEig6kc-.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DKLIZ_5X.css">
   </head>
   <body>
