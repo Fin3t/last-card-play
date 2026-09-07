@@ -5,6 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Last Card</title>
     <meta name="description" content="A shrinking deck on a living board. One thumb. The last card saves the realm." />
+    <!-- Install identity for the web build (public/manifest.webmanifest,
+         public/icons/). Relative paths on purpose: the same dist serves a
+         domain root and the GitHub Pages /last-card-play/ subpath (#397).
+         The offline shell itself is src/ui/pwa.ts + the generated sw.js;
+         the native Capacitor shell never registers it. -->
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
+    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+    <meta name="theme-color" content="#f9e8cf">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Last Card">
+    <!-- black-translucent: the page already lays out under the notch and
+         home indicator (viewport-fit=cover, env(safe-area-inset-*) in every
+         fixed rule), so the standalone window gets the same full-height canvas. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <!-- #216: the faces are self-hosted (src/ui/fonts.css + src/ui/fonts/,
          font-display: swap). A cross-origin stylesheet here was render-blocking:
          with no network, first paint and the module script behind it waited for
@@ -1336,8 +1353,8 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-CjExEtFN.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DKLIZ_5X.css">
+    <script type="module" crossorigin src="./assets/index-CEVugvsp.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DbEvcpCW.css">
   </head>
   <body>
     <div id="app">

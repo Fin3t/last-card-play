@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Last Card — the same mark as icons/*.png (drawn by hand here, by PIL
+       there): parchment ground, an ink card mid-drag, a cream hex on its face. -->
+  <rect width="512" height="512" fill="#f9e8cf"/>
+  <g transform="rotate(-7 256 256)">
+    <rect x="129" y="80" width="254" height="352" rx="28" fill="#3f3227"/>
+    <rect x="147" y="98" width="218" height="316" rx="20" fill="none" stroke="#fffaf0" stroke-width="5"/>
+    <polygon points="256,142 342,192 342,292 256,342 170,292 170,192" fill="#e0b050"/>
+    <polygon points="256,153 332,197 332,286 256,331 180,286 180,197" fill="#fffaf0"/>
+    <polygon points="209,235 256,201 303,235" fill="#3f3227"/>
+    <rect x="216" y="233" width="80" height="55" fill="#3f3227"/>
+    <rect x="190" y="372" width="132" height="26" rx="13" fill="#fffaf0"/>
+  </g>
+</svg>
