@@ -41,6 +41,10 @@
         -webkit-font-smoothing: antialiased;
       }
       #app { position: relative; height: 100%; width: 100%; overflow: hidden; user-select: none; }
+      #app, #app button, #app svg, #skills *, #hand *, #deck * {
+        -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+      }
+      #app textarea { -webkit-user-select: text; user-select: text; }
       #app.sky-noon { background: linear-gradient(178deg, #f9e8cf 0%, #f2dcbe 48%, #eccfab 100%); }
       #app.sky-dusk { background: linear-gradient(178deg, #e8b793 0%, #dd9d84 42%, #c97f79 100%); }
       /* #174: the industrial age's noon — same sky, smoke in it */
@@ -82,21 +86,23 @@
          tests/hud_register.test.ts: mean |L - band| per element on x2 frames,
          loud at >= 40. */
 
-      /* Menu button — at rest the three bars alone on the sky, the hex face
-         only under the thumb. */
+      /* A visible, thumb-sized menu surface over the world. */
       #menu, .hexbtn {
         position: absolute; top: calc(20px + env(safe-area-inset-top)); left: calc(18px + env(safe-area-inset-left)); width: 48px; height: 48px; border: 0; padding: 0; cursor: pointer;
-        background: transparent;
+        background: #fffaf0;
+        border: 1px solid rgba(97,62,32,.2); border-radius: 14px;
+        box-shadow: 0 3px 10px rgba(50,35,20,.2);
         z-index: 5;
       }
       #menu .hexface, .hexbtn .hexface {
         display: flex; width: 100%; height: 100%; align-items: center; justify-content: center;
-        clip-path: polygon(50% 0, 96% 26%, 96% 74%, 50% 100%, 4% 74%, 4% 26%);
+        border-radius: inherit;
         background: rgba(255,252,244,0);
         transition: background-color 160ms ease-out;
       }
       #menu svg, .hexbtn svg { width: 19px; height: 14px; display: block; }
-      #menu rect, .hexbtn rect { fill: rgba(74,61,49,.62); transition: fill 160ms ease-out; }
+      #menu rect, .hexbtn rect { fill: #4a3d31; transition: fill 160ms ease-out; }
+      #menu:focus-visible { outline: 3px solid #4a3d31; outline-offset: 3px; }
       #menu:active, .hexbtn:active { transform: scale(0.95); }
       #menu:active .hexface, #menu:focus-visible .hexface { background: rgba(255,252,244,.95); }
       #menu:active rect, #menu:focus-visible rect { fill: #4a3d31; }
@@ -143,6 +149,13 @@
         pointer-events: none;
         z-index: 5;
       }
+      #hud {
+        padding: 9px 12px; border-radius: 15px;
+        background: rgba(255,250,240,.96);
+        border: 1px solid rgba(97,62,32,.16);
+        box-shadow: 0 3px 10px rgba(50,35,20,.18);
+      }
+      #hud #ledger { background: none; border: 0; padding: 0; box-shadow: none; }
       #score, .score {
         font-size: 38px; font-weight: 900; line-height: 1; letter-spacing: -.02em;
         color: #3f3227;
@@ -261,6 +274,17 @@
         display: none; pointer-events: none; z-index: 5;
       }
       #skills.live { display: block; }
+      #skills, #skills button { touch-action: none; }
+      #skills .skill-hub {
+        position: absolute; width: 44px; height: 44px; border-radius: 50%;
+        border: 1px solid rgba(90,72,52,.55); background: #fffaf0; color: #4a3d31;
+        box-shadow: 0 2px 7px rgba(45,32,20,.25); pointer-events: auto;
+        display: grid; place-items: center; padding: 10px; cursor: pointer;
+      }
+      #skills .skill-hub svg { width: 24px; height: 24px; }
+      #skills .skill-hub .cancel { display: none; font-size: 22px; line-height: 1; }
+      #skills.choosing .skill-hub svg { display: none; }
+      #skills.choosing .skill-hub .cancel { display: block; }
       /* One skill: a round face with its own frame, the way a C&C3 support
          power carries its own. That frame is the ICON's, not a bar behind the
          group — over grass or water the disc is what keeps the silhouette
@@ -268,20 +292,23 @@
       #skills .skill {
         position: absolute; appearance: none; padding: 0; cursor: pointer;
         width: 52px; height: 52px; border-radius: 50%;
-        pointer-events: auto;
+        pointer-events: none;
         background: rgba(255,252,243,.94);
         border: 2px solid rgba(90,72,52,.55);
         box-shadow: 0 2px 7px rgba(45,32,20,.35);
         /* #355: the circle's at-rest register. Geometry (#257) and the
            cooldown count (#314) are untouched; only the weight moves. */
-        opacity: .7;
+        opacity: 0; visibility: hidden;
         transform: translate(var(--yield-x, 0px), var(--yield-y, 0px)) scale(.36);
         transform-origin: 50% 50%;
         transition: transform 180ms cubic-bezier(0.77, 0, 0.175, 1), opacity 160ms ease-out;
       }
-      #app.hud-engaged #skills .skill {
+      #skills.choosing .skill, #skills:focus-within .skill {
         transform: translate(0, 0) scale(1);
+        opacity: .85; visibility: visible; pointer-events: auto;
       }
+      #skills .skill.hovered { opacity: 1; border-color: #2f2519; box-shadow: 0 0 0 3px #ffe7b4, 0 3px 10px rgba(45,32,20,.4); }
+      #skills.armed .skill-hub { border: 2px solid #2f2519; box-shadow: 0 0 0 3px #ffe7b4; }
       #skills .skill:active { transform: scale(0.94); }
       /* The verb being decided — and, while any verb is armed, the whole
          circle, so the prices can be compared (`#skills.armed` is main.ts's). */
@@ -478,6 +505,9 @@
         opacity: .62;
         transition: opacity 160ms ease-out;
       }
+      #carddock #deck {
+        position: relative; inset: auto; width: 56px; height: 84px; flex: none;
+      }
       #deck.buyable {
         pointer-events: auto;
         cursor: pointer;
@@ -533,13 +563,30 @@
         position: absolute; left: 0; right: 0; bottom: 0;
         padding: 10px calc(14px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
         display: flex; flex-direction: column; align-items: center; gap: 9px;
-        background: rgba(250,240,222,.95);
-        border-top: 1px solid rgba(97,62,32,.12);
+        background: transparent;
+        pointer-events: none;
         z-index: 6;
         transform: translateY(var(--tray-yield, 0px));
         transition: transform 180ms cubic-bezier(0.77, 0, 0.175, 1);
       }
       #app.hud-engaged #tray { transform: translateY(0); }
+      #carddock {
+        display: flex; align-items: flex-end; gap: 8px; padding: 14px 10px 8px;
+        border-radius: 20px; background: rgba(250,240,222,.92);
+        border: 1px solid rgba(97,62,32,.16);
+        box-shadow: 0 4px 16px rgba(50,35,20,.16);
+      }
+      #hand, #burn { pointer-events: auto; }
+      #cardhint, #cardnote {
+        padding: 5px 10px; border-radius: 10px;
+        background: rgba(255,250,240,.94);
+      }
+      @media (max-width: 359px) {
+        #hand { gap: 6px; }
+        #hand .card { width: 60px; }
+        #carddock { gap: 4px; padding-inline: 7px; }
+        #carddock #deck { width: 48px; }
+      }
       #cardhint, #cardnote, .teach {
         font-size: 12px; line-height: 1.35; font-weight: 600; color: rgba(74,58,41,.75);
         text-align: center; max-width: 300px;
@@ -675,6 +722,8 @@
         padding: 12px; display: flex; flex-direction: column; gap: 8px;
         box-shadow: 0 14px 40px rgba(50, 28, 16, 0.4);
       }
+      #sheetcard { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+      #sheetcard > * { flex-shrink: 0; }
       #sheetcard button, .sheet button {
         appearance: none; border: 0; cursor: pointer; font: inherit;
         width: 100%; height: 50px; border-radius: 12px;
@@ -1278,7 +1327,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-CeIoLUid.js"></script>
+    <script type="module" crossorigin src="./assets/index-sHuwe0E5.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DKLIZ_5X.css">
   </head>
   <body>
@@ -1319,6 +1368,11 @@
         <span id="build-update-message">A new version is ready.</span>
         <button id="build-update-reload" type="button">Reload</button>
       </div>
+      <div id="tray">
+        <div id="cardhint"></div>
+        <div id="cardnote"></div>
+        <div id="carddock">
+        <div id="hand"></div>
       <div id="deck" class="deckstack">
         <!-- #91: static boot twin of render.ts's deckChipSvg (standard kind,
              count 0) — the pre-JS first paint. The drawing's ONE owner is
@@ -1342,10 +1396,7 @@
           </g>
         </svg>
       </div>
-      <div id="tray">
-        <div id="cardhint"></div>
-        <div id="cardnote"></div>
-        <div id="hand"></div>
+        </div>
         <button id="burn" type="button">Burn card (costs 1 card, 1 turn)</button>
       </div>
       
