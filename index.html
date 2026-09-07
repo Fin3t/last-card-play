@@ -418,6 +418,18 @@
         border-right: 3.5px solid transparent;
         border-top: 5px solid rgba(255, 252, 243, 0.88);
       }
+      #board3d-labels .placard3d.has-leader::before {
+        content: ''; position: absolute;
+        left: calc(50% + var(--stem-dx)); top: 100%;
+        width: var(--leader-length); height: 1px;
+        background: rgba(97, 62, 32, .55);
+        transform-origin: 0 0; transform: rotate(var(--leader-angle));
+      }
+      #board3d-labels .placard3d.has-leader::after {
+        left: calc(50% + var(--anchor-dx)); top: calc(100% + var(--anchor-dy));
+        width: 3px; height: 3px; margin: -1.5px; border: 0; border-radius: 50%;
+        background: rgba(97, 62, 32, .7);
+      }
       /* #355's register, moved up to the card that now carries the quest pill:
          a free-standing pill was the unit before, the placard is the unit now,
          and a mark on the landscape stands a step down until the player asks
@@ -1261,7 +1273,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-DVpHFAFk.js"></script>
+    <script type="module" crossorigin src="./assets/index-D9TjD8Xj.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DKLIZ_5X.css">
   </head>
   <body>
