@@ -756,6 +756,8 @@
       }
       #sheetcard #resume, #sheetcard button.primary, .sheet button.primary { background: #3f3227; color: #f8ecd8; }
       #sheetcard button:active, .sheet button:active { transform: scale(0.985); }
+      #cameracontrols { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 6px; }
+      #sheetcard #cameracontrols button { min-height: 44px; font-size: 14px; }
 
       /* #71: Realm Flow Readout */
       .realm-flow {
@@ -1360,7 +1362,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-DWxZytD4.js"></script>
+    <script type="module" crossorigin src="./assets/index-DugIaQH-.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DbEvcpCW.css">
   </head>
   <body>
@@ -1445,6 +1447,11 @@
           <div id="realmflow" class="realm-flow"></div>
           <div id="runchronicle" class="run-chronicle"></div>
           <button id="resume" class="primary" type="button">Resume</button>
+          <div id="cameracontrols" role="group" aria-label="Map view">
+            <button id="zoomout" type="button" aria-label="Zoom out">− Wider</button>
+            <button id="recenterview" type="button" aria-label="Recenter your realm">Your realm</button>
+            <button id="zoomin" type="button" aria-label="Zoom in">Closer +</button>
+          </div>
           <button id="numbersmode" type="button"></button>
           <button id="fpsmode" type="button"></button>
           <button id="tutorialmode" type="button"></button>
